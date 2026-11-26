@@ -34,6 +34,9 @@ window.__ModuleLoader__.load({
     const POLL_MS = 5000
     const ERROR_POLL_MS = 30000
     const LOADING_POLL_MS = 1500
+    // 单击 / 双击判定窗口：窗口内收到第二次点击即视为双击，直接进编辑，
+    // 不再先触发一次预览（避免预览闪现）。250ms 是响应速度与双击成功率的折中。
+    const DOUBLE_TAP_MS = 250
 
     const DICT = {
       zh: {
@@ -47,11 +50,12 @@ window.__ModuleLoader__.load({
         allWorkspaces: '全部工作区',
         unlinked: '不关联工作区',
         removedWorkspace: '工作区已移除',
-        wallHint: '拖动便签摆放 · 点击便签原地编辑 · Esc 取消',
+        workspaceFilter: '按工作区筛选',
+        wallHint: '拖动便签摆放 · 单击预览 · 双击编辑 · Esc 关闭预览',
         wallEmpty: '墙上还没有便签',
         wallEmptyHint: '点右上角「新便签」贴一张',
         noMatch: '没有匹配的便签',
-        noMatchHint: '换个关键词或状态看看',
+        noMatchHint: '换个关键词、状态或工作区看看',
         statusPlanned: '规划中',
         statusActive: '进行中',
         statusDone: '已完成',
@@ -77,6 +81,10 @@ window.__ModuleLoader__.load({
         noStatus: '未设置',
         plainNote: '普通便签',
         edit: '编辑',
+        preview: '预览',
+        previewHint: '单击预览 · 双击编辑',
+        previewTime: '时间',
+        noBody: '（没有正文）',
         save: '保存',
         saving: '保存中…',
         cancel: '取消',
@@ -143,11 +151,12 @@ window.__ModuleLoader__.load({
         allWorkspaces: 'All workspaces',
         unlinked: 'No workspace',
         removedWorkspace: 'Workspace removed',
-        wallHint: 'Drag notes to place them · click a note to edit in place · Esc to cancel',
+        workspaceFilter: 'Filter by workspace',
+        wallHint: 'Drag notes to place them · click to preview · double-click to edit · Esc closes the preview',
         wallEmpty: 'The wall is empty',
         wallEmptyHint: 'Use “New note” to pin one',
         noMatch: 'No notes match',
-        noMatchHint: 'Try another keyword or status',
+        noMatchHint: 'Try another keyword, status or workspace',
         statusPlanned: 'Planned',
         statusActive: 'In progress',
         statusDone: 'Done',
@@ -173,6 +182,10 @@ window.__ModuleLoader__.load({
         noStatus: 'Not set',
         plainNote: 'Plain note',
         edit: 'Edit',
+        preview: 'Preview',
+        previewHint: 'Click to preview · double-click to edit',
+        previewTime: 'Time',
+        noBody: '(No body)',
         save: 'Save',
         saving: 'Saving…',
         cancel: 'Cancel',
@@ -263,6 +276,11 @@ window.__ModuleLoader__.load({
       .todo-search svg{flex:none;width:14px;height:14px}
       .todo-search input{flex:1;min-width:0;height:100%;padding:0;border:0;outline:none;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}
       .todo-search input::placeholder{color:var(--dsw-alias-label-tertiary)}
+      .todo-workspace-filter{position:relative;display:flex;align-items:center;height:32px;border:0.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-tertiary);transition:border-color .15s}
+      .todo-workspace-filter:focus-within{border-color:var(--dsw-alias-state-business-primary)}
+      .todo-workspace-filter svg{position:absolute;right:8px;flex:none;width:12px;height:12px;pointer-events:none;color:var(--dsw-alias-label-tertiary)}
+      .todo-workspace-filter select{box-sizing:border-box;width:140px;height:100%;padding:0 26px 0 9px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;cursor:pointer;outline:none;appearance:none;text-overflow:ellipsis}
+      .todo-workspace-filter select:focus-visible{outline:none}
       .todo-chips{display:flex;align-items:center;gap:2px;padding:2px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
       .todo-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
       .todo-chip:hover{background:var(--dsw-alias-interactive-bg-hover)}
@@ -314,6 +332,11 @@ window.__ModuleLoader__.load({
       .todo-tag[data-status="active"] .dot{background:#3d7e9c}
       .todo-tag[data-status="done"] .dot{background:#578a5d}
       .todo-tag[data-status="cancelled"] .dot{background:#a7a196}
+      .todo-note-top .todo-tag{flex:none}
+      /* 工作区小标签：虚线框比状态更轻，名字太长就省略，悬停看全名 */
+      .todo-workspace-tag{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto;min-width:0;max-width:100%;height:20px;padding:0 7px;border-radius:999px;border:1px dashed rgba(120,100,60,.3);background:transparent;color:var(--todo-ink-faint);font-size:11px;line-height:1;white-space:nowrap;overflow:hidden}
+      .todo-workspace-tag > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .todo-workspace-tag svg{flex:none;opacity:.7}
       .todo-note-title{flex:none;margin:0 0 5px;font-size:15px;line-height:1.35;font-weight:650;letter-spacing:.1px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;color:var(--todo-ink)}
       .todo-note-body{flex:1;min-height:0;margin:0;padding-right:2px;font-size:12.5px;line-height:1.6;color:var(--todo-ink-soft);overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere;white-space:pre-wrap;scrollbar-width:thin;scrollbar-color:rgba(120,100,60,.28) transparent}
       .todo-note-body::-webkit-scrollbar{width:5px}
@@ -324,8 +347,32 @@ window.__ModuleLoader__.load({
       .todo-note-when{flex:none;margin-top:5px;padding-top:4px;border-top:1px dashed rgba(120,100,60,.18);color:var(--todo-ink-faint);font-size:11.5px;line-height:16px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .todo-note-when.warn{color:var(--todo-danger)}
 
+      /* ---------------- 只读预览 ---------------- */
+      .todo-preview{position:absolute;z-index:9997;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;width:340px;max-height:min(70vh,520px);padding:13px 14px 11px;border-radius:12px;background:var(--todo-paper, var(--todo-paper-cream));border:1px solid color-mix(in srgb, var(--todo-paper, var(--todo-paper-cream)) 62%, #7a621f);box-shadow:var(--dsw-elevation-prominent);color:var(--todo-ink);cursor:default;transform-origin:34% 0;animation:todo-unfold 170ms cubic-bezier(.22,.85,.28,1) both}
+      .todo-preview .tape{position:absolute;top:-9px;left:50%;width:62px;height:18px;transform:translateX(-50%) rotate(-2.2deg);background:linear-gradient(90deg,rgba(255,255,255,.34),rgba(255,255,255,.74) 40%,rgba(255,255,255,.46));border:1px solid rgba(120,100,60,.14);border-radius:2px;pointer-events:none}
+      .todo-preview-head{display:flex;align-items:center;gap:6px;flex:none;min-height:20px}
+      .todo-preview-title{flex:none;margin:0;font-size:17px;line-height:1.35;font-weight:650;letter-spacing:.1px;overflow-wrap:anywhere;color:var(--todo-ink)}
+      .todo-preview-body{flex:1;min-height:0;margin:0;padding-right:2px;font-size:13px;line-height:1.6;color:var(--todo-ink-soft);overflow-y:auto;overflow-wrap:anywhere;white-space:pre-wrap;scrollbar-width:thin;scrollbar-color:rgba(120,100,60,.28) transparent}
+      .todo-preview-body.empty{color:var(--todo-ink-faint)}
+      .todo-preview-body::-webkit-scrollbar{width:5px}
+      .todo-preview-body::-webkit-scrollbar-thumb{background:rgba(120,100,60,.22);border-radius:3px}
+      .todo-preview-meta{flex:none;display:flex;flex-direction:column;gap:4px;padding-top:7px;border-top:1px dashed rgba(120,100,60,.18);font-size:11.5px;line-height:16px;color:var(--todo-ink-faint)}
+      .todo-preview-meta .row{display:flex;gap:6px;min-width:0}
+      .todo-preview-meta .row > span:first-child{flex:none}
+      .todo-preview-meta .row > span:last-child{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--todo-ink-soft)}
+      .todo-preview-meta .warn{color:var(--todo-danger)}
+      .todo-preview-foot{flex:none;display:flex;align-items:center;gap:6px;padding-top:7px;border-top:1px solid rgba(120,100,60,.16)}
+      .todo-preview-foot .spacer{flex:1}
+      /* 预览内容比卡片稍晚一拍浮上来，展开更有层次；卡片本体只负责缩放与淡入 */
+      .todo-preview > :not(.tape){animation:todo-unfold-part 200ms cubic-bezier(.22,.85,.28,1) both}
+      .todo-preview > :nth-child(2){animation-delay:14ms}
+      .todo-preview > :nth-child(3){animation-delay:32ms}
+      .todo-preview > :nth-child(4){animation-delay:50ms}
+      .todo-preview > :nth-child(5){animation-delay:68ms}
+      .todo-preview > :nth-child(6){animation-delay:86ms}
+
       /* ---------------- 原地编辑 ---------------- */
-      .todo-editor{position:absolute;z-index:9997;box-sizing:border-box;display:flex;flex-direction:column;gap:9px;width:340px;padding:13px 14px 11px;border-radius:12px;background:var(--todo-paper, var(--todo-paper-cream));border:1px solid color-mix(in srgb, var(--todo-paper, var(--todo-paper-cream)) 62%, #7a621f);box-shadow:var(--dsw-elevation-prominent);color:var(--todo-ink)}
+      .todo-editor{position:absolute;z-index:9997;box-sizing:border-box;display:flex;flex-direction:column;gap:9px;width:340px;padding:13px 14px 11px;border-radius:12px;background:var(--todo-paper, var(--todo-paper-cream));border:1px solid color-mix(in srgb, var(--todo-paper, var(--todo-paper-cream)) 62%, #7a621f);box-shadow:var(--dsw-elevation-prominent);color:var(--todo-ink);transform-origin:34% 0;animation:todo-editor-in 150ms cubic-bezier(.22,.85,.28,1) both}
       .todo-editor .tape{position:absolute;top:-9px;left:50%;width:62px;height:18px;transform:translateX(-50%) rotate(-2.2deg);background:linear-gradient(90deg,rgba(255,255,255,.34),rgba(255,255,255,.74) 40%,rgba(255,255,255,.46));border:1px solid rgba(120,100,60,.14);border-radius:2px;pointer-events:none}
       .todo-editor input.title{width:100%;border:0;border-bottom:1px dashed rgba(120,100,60,.3);background:transparent;padding:2px 0 5px;font:inherit;font-size:17px;font-weight:650;color:var(--todo-ink);outline:none}
       .todo-editor input.title::placeholder,.todo-editor textarea::placeholder{color:var(--todo-ink-faint);font-weight:400}
@@ -422,9 +469,14 @@ window.__ModuleLoader__.load({
       .todo-root .todo-editor input:focus-visible,.todo-root .todo-editor textarea:focus-visible,.todo-root .todo-editor select:focus-visible{outline:none}
       .todo-btn.todo-toggle:hover{background:var(--dsw-alias-interactive-bg-hover)}
       @keyframes todo-fade{from{opacity:0}to{opacity:1}}
-      @media (max-width:900px){.todo-search{width:150px}.todo-brand .sub{display:none}}
+      /* 浮层从便签中心轻轻摊开：略小、略高、带一点纸片倾斜，落回原位 */
+      @keyframes todo-unfold{from{opacity:0;transform:translateY(-8px) scale(.94) rotate(-.6deg)}to{opacity:1;transform:none}}
+      /* 预览 → 编辑是同位置切换，起点保留一点不透明度，避免中间闪一下墙 */
+      @keyframes todo-editor-in{from{opacity:.35;transform:translateY(-4px) scale(.96)}to{opacity:1;transform:none}}
+      @keyframes todo-unfold-part{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+      @media (max-width:900px){.todo-search{width:150px}.todo-brand .sub{display:none}.todo-workspace-filter select{width:124px}}
       @media (max-width:720px){.todo-topbar{padding:10px 14px}.todo-statusbar{padding:8px 14px}}
-      @media (prefers-reduced-motion:reduce){.todo-mask,.todo-dialog{animation:none}.todo-note,.todo-note.arranging,.todo-switch,.todo-switch .knob,.todo-search{transition:none}}
+      @media (prefers-reduced-motion:reduce){.todo-mask,.todo-dialog,.todo-preview,.todo-editor{animation:none}.todo-preview > :not(.tape){animation:none}.todo-note,.todo-note.arranging,.todo-switch,.todo-switch .knob,.todo-search{transition:none}}
     `
 
     function formatEntry(entry, params) {
@@ -791,6 +843,40 @@ window.__ModuleLoader__.load({
         h('path', { d: 'm10.2 10.2 3.2 3.2', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }))
     }
 
+    function ChevronDownIcon() {
+      return h('svg', {
+        width: 12,
+        height: 12,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        'aria-hidden': true,
+        style: { display: 'block' },
+      }, h('path', {
+        d: 'm4 6.2 4 4 4-4',
+        stroke: 'currentColor',
+        strokeWidth: 1.2,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      }))
+    }
+
+    function FolderIcon({ size = 10 }) {
+      return h('svg', {
+        width: size,
+        height: size,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        'aria-hidden': true,
+        style: { display: 'block' },
+      },
+        h('path', {
+          d: 'M2 5.2A1.2 1.2 0 0 1 3.2 4h2.3l1.3 1.5h5a1.2 1.2 0 0 1 1.2 1.2v4.1a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 10.8V5.2Z',
+          stroke: 'currentColor',
+          strokeWidth: 1.2,
+          strokeLinejoin: 'round',
+        }))
+    }
+
     // ---------------------------------------------------------------- 基础组件
 
     function Switch({ checked, onChange, label, disabled }) {
@@ -835,18 +921,72 @@ window.__ModuleLoader__.load({
       }, [ref])
     }
 
+    // 单击 / 双击手势：不依赖原生 dblclick（触屏不可靠，且浏览器会在 dblclick 前
+    // 先派发第二次 click，容易让预览闪一下）。这里统一用 pointerup / 键盘触发：
+    //   - 第一次 tap 先挂起 DOUBLE_TAP_MS 的计时器，计时结束才打开预览；
+    //   - 计时器未结束时又来一次 tap，就取消计时器并直接进入编辑。
+    // 因此双击绝不会先触发预览，单击最多等 250ms。
+    function useTapGesture(onSingle, onDouble, nodeRef) {
+      const timerRef = React.useRef(null)
+      const singleRef = React.useRef(onSingle)
+      const doubleRef = React.useRef(onDouble)
+      const nodeRefOfCard = React.useRef(nodeRef)
+      singleRef.current = onSingle
+      doubleRef.current = onDouble
+      nodeRefOfCard.current = nodeRef
+
+      function cancel() {
+        if (timerRef.current !== null) {
+          clearTimeout(timerRef.current)
+          timerRef.current = null
+        }
+      }
+
+      // 挂起期间点了别处（别的便签、顶栏、画布空白），就放弃这次单击，
+      // 避免用户在别处操作后预览才姗姗来迟。
+      React.useEffect(() => {
+        const onPointerDown = (event) => {
+          if (timerRef.current === null) return
+          const node = nodeRefOfCard.current && nodeRefOfCard.current.current
+          if (node && event.target instanceof Node && node.contains(event.target)) return
+          cancel()
+        }
+        document.addEventListener('pointerdown', onPointerDown, true)
+        return () => {
+          document.removeEventListener('pointerdown', onPointerDown, true)
+          cancel()
+        }
+      }, [])
+
+      const tap = React.useCallback(() => {
+        if (timerRef.current !== null) {
+          clearTimeout(timerRef.current)
+          timerRef.current = null
+          if (doubleRef.current) doubleRef.current()
+          return
+        }
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null
+          if (singleRef.current) singleRef.current()
+        }, DOUBLE_TAP_MS)
+      }, [])
+
+      return { tap, cancel }
+    }
+
     function paperOf(task) {
       return `var(--todo-paper-${PAPER[task.color] ? task.color : 'cream'})`
     }
 
     // ---------------------------------------------------------------- 便签
 
-    function NoteCard({ task, t, canvasWidth, draggingEnabled, onOpen, onMove, onDragY, onDragStart, onDragEnd }) {
+    function NoteCard({ task, t, canvasWidth, draggingEnabled, previewing, workspaceLabel, onPreview, onEdit, onMove, onDragY, onDragStart, onDragEnd }) {
       const nodeRef = React.useRef(null)
       const dragRef = React.useRef(null)
-      const suppressClickRef = React.useRef(0)
       const [position, setPosition] = React.useState({ x: task.x ?? 0, y: task.y ?? 0 })
       const [dragging, setDragging] = React.useState(false)
+      // 便签字身既是“预览入口”也是“编辑入口”：单击预览、双击编辑。
+      const gesture = useTapGesture(onPreview, onEdit, nodeRef)
 
       React.useEffect(() => {
         if (dragRef.current === null) setPosition({ x: clamp(task.x ?? 0), y: task.y ?? 0 })
@@ -867,6 +1007,8 @@ window.__ModuleLoader__.load({
           origX: position.x,
           origY: position.y,
           moved: false,
+          // 状态标签不是激活入口：点它不该弹预览或编辑。
+          onTag: Boolean(event.target.closest('.todo-tag')),
         }
         node.setPointerCapture(event.pointerId)
         event.preventDefault()
@@ -879,6 +1021,8 @@ window.__ModuleLoader__.load({
         const dy = event.clientY - drag.startY
         if (!drag.moved && Math.hypot(dx, dy) > 5) {
           drag.moved = true
+          // 手势从“单击”变成“拖动”，放弃已经挂起的预览判定。
+          gesture.cancel()
           setDragging(true)
           onDragStart()
         }
@@ -896,10 +1040,23 @@ window.__ModuleLoader__.load({
           const dy = event.clientY - drag.startY
           setDragging(false)
           onDragEnd()
-          suppressClickRef.current = Date.now()
           onMove(task.id, clamp(drag.origX + dx), Math.max(8, drag.origY + dy))
-        } else {
-          onOpen()
+          return
+        }
+        if (drag.onTag) return
+        // 唯一的激活入口：拖动结束不会走到这里，也就不会误开预览。
+        // 浏览器在 pointerup 之后还会补发 click，但卡片不再绑定 onClick，
+        // 所以一次物理点击只会计一次 tap，不存在重复触发。
+        gesture.tap()
+      }
+
+      function handlePointerCancel(event) {
+        const drag = dragRef.current
+        if (!drag || drag.pointerId !== event.pointerId) return
+        dragRef.current = null
+        if (drag.moved) {
+          setDragging(false)
+          onDragEnd()
         }
       }
 
@@ -925,7 +1082,9 @@ window.__ModuleLoader__.load({
         className: 'todo-note' + (dragging ? ' dragging' : '') + (quiet ? ' quiet' : ''),
         role: 'button',
         tabIndex: 0,
-        'aria-label': [task.title || t('titlePlaceholder'), t('status' + task.status.charAt(0).toUpperCase() + task.status.slice(1)), when, t('edit')].filter(Boolean).join('，'),
+        'aria-label': [task.title || t('titlePlaceholder'), t('status' + task.status.charAt(0).toUpperCase() + task.status.slice(1)), workspaceLabel, when, t('previewHint')].filter(Boolean).join('，'),
+        'aria-haspopup': 'dialog',
+        'aria-expanded': previewing ? 'true' : 'false',
         style: {
           left: `${position.x}px`,
           top: `${position.y}px`,
@@ -936,18 +1095,14 @@ window.__ModuleLoader__.load({
         onPointerDown: handlePointerDown,
         onPointerMove: handlePointerMove,
         onPointerUp: handlePointerUp,
-        onPointerCancel: handlePointerUp,
-        onClick: (event) => {
-          if (!draggingEnabled) return
-          if (Date.now() - suppressClickRef.current < 300) return
-          if (event.target.closest('.todo-tag')) return
-          onOpen()
-        },
+        onPointerCancel: handlePointerCancel,
         onKeyDown: (event) => {
           if (!draggingEnabled) return
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
-            onOpen()
+            if (event.repeat) return
+            // 键盘只有“激活”一种动作，直接打开预览；编辑可用预览卡里的按钮。
+            onPreview()
           }
         },
       },
@@ -955,11 +1110,116 @@ window.__ModuleLoader__.load({
         h('div', { className: 'todo-note-top' },
           h('span', { className: 'todo-tag', 'data-status': task.status },
             h('i', { className: 'dot' }),
-            t('status' + task.status.charAt(0).toUpperCase() + task.status.slice(1)))),
+            t('status' + task.status.charAt(0).toUpperCase() + task.status.slice(1))),
+          workspaceLabel
+            ? h('span', { className: 'todo-workspace-tag', title: workspaceLabel },
+              h(FolderIcon),
+              h('span', null, workspaceLabel))
+            : null),
         h('h2', { className: 'todo-note-title' }, task.title || t('titlePlaceholder')),
         h('p', { ref: bodyRef, className: 'todo-note-body' }, task.note || ''),
         when ? h('div', { className: 'todo-note-when' + (timeInvalid(task) ? ' warn' : '') },
           (timeInvalid(task) ? t('timeInvalidShort') + '：' : '') + when) : null)
+    }
+
+    // ---------------------------------------------------------------- 只读预览
+
+    // 预览卡浮在便签原来的位置：只读展示标题、正文、状态、时间、工作区与附件，
+    // 没有任何输入控件，不会进入编辑态。双击卡片（或点「编辑」）才切到 NoteEditor。
+    function PreviewCard({ task, t, canvasWidth, workspaces, onClose, onEdit }) {
+      const cardRef = React.useRef(null)
+      const closeRef = React.useRef(onClose)
+      closeRef.current = onClose
+      // 单击卡片无动作；双击卡片直接编辑，与双击便签保持同一套手势判定。
+      const gesture = useTapGesture(() => {}, onEdit, cardRef)
+
+      // 只在挂载时聚焦一次并监听 Esc；父级每次轮询都会重建 onClose，
+      // 不能把它放进依赖里，否则会反复把焦点抢回卡片。
+      React.useEffect(() => {
+        const node = cardRef.current
+        if (!node) return undefined
+        const frame = requestAnimationFrame(() => {
+          if (!node) return
+          try {
+            node.focus({ preventScroll: true })
+          } catch {
+            node.focus()
+          }
+        })
+        const onKey = (event) => {
+          if (event.key === 'Escape') closeRef.current()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => {
+          cancelAnimationFrame(frame)
+          window.removeEventListener('keydown', onKey)
+        }
+      }, [])
+
+      const when = timeText(task, t)
+      const workspace = (workspaces || []).find((item) => item.id === task.workspaceId)
+      const attachments = task.attachments || []
+      const left = Math.max(8, Math.min(task.x ?? 8, Math.max(8, canvasWidth - 356)))
+      const top = Math.max(8, task.y ?? 8)
+      const statusLabel = t('status' + task.status.charAt(0).toUpperCase() + task.status.slice(1))
+
+      return h('div', {
+        ref: cardRef,
+        className: 'todo-preview',
+        role: 'dialog',
+        'aria-label': `${t('preview')}：${task.title || t('titlePlaceholder')}`,
+        tabIndex: -1,
+        style: { left: `${left}px`, top: `${top}px`, '--todo-paper': paperOf(task) },
+        // 与 NoteEditor 一致：卡内指针事件不冒泡到画布，避免拖动/关闭逻辑串味。
+        onPointerDown: (event) => event.stopPropagation(),
+        onPointerUp: (event) => {
+          if (event.button !== 0) return
+          // 卡内按钮自己处理点击，不参与双击判定。
+          if (event.target.closest('button, a, input, textarea, select')) return
+          gesture.tap()
+        },
+      },
+        h('span', { className: 'tape', 'aria-hidden': true }),
+        h('div', { className: 'todo-preview-head' },
+          h('span', { className: 'todo-tag', 'data-status': task.status },
+            h('i', { className: 'dot' }),
+            statusLabel)),
+        h('h2', { className: 'todo-preview-title' }, task.title || t('titlePlaceholder')),
+        h('p', { className: 'todo-preview-body' + (task.note ? '' : ' empty') }, task.note || t('noBody')),
+        (when || workspace || attachments.length > 0)
+          ? h('div', { className: 'todo-preview-meta' },
+            when
+              ? h('div', { className: 'row' },
+                h('span', null, t('previewTime')),
+                h('span', { className: timeInvalid(task) ? 'warn' : undefined },
+                  (timeInvalid(task) ? t('timeInvalidShort') + '：' : '') + when))
+              : null,
+            workspace
+              ? h('div', { className: 'row' },
+                h('span', null, t('workspaceField')),
+                h('span', null, workspace.title || workspace.path || workspace.id))
+              : null,
+            attachments.length > 0
+              ? h('div', null,
+                h('div', { className: 'row' },
+                  h('span', null, t('attachmentsField')),
+                  h('span', null, t('attachmentCount', { n: attachments.length }))),
+                h('ul', { className: 'todo-attach-list' },
+                  ...attachments.map((entry, index) => h('li', {
+                    key: entry.id || `att-${index}`,
+                    className: 'todo-attach',
+                  },
+                    h('span', { className: 'todo-attach-name' }, entry.name || entry.path),
+                    entry.name && entry.name !== entry.path
+                      ? h('span', { className: 'todo-attach-path' }, entry.path)
+                      : null,
+                    entry.missing ? h('span', { className: 'todo-attach-warn' }, t('missingFile')) : null))))
+              : null)
+          : null,
+        h('div', { className: 'todo-preview-foot' },
+          h('button', { type: 'button', className: 'todo-mini', onClick: onClose }, t('close')),
+          h('span', { className: 'spacer' }),
+          h('button', { type: 'button', className: 'todo-mini primary', onClick: onEdit }, t('edit'))))
     }
 
     // ---------------------------------------------------------------- 原地编辑
@@ -1356,7 +1616,11 @@ window.__ModuleLoader__.load({
 
       const [query, setQuery] = React.useState('')
       const [filter, setFilter] = React.useState('all')
+      // 'all' | 'none'（不关联） | workspaceId（含已移除的工作区 id）
+      const [workspaceFilter, setWorkspaceFilter] = React.useState('all')
       const [editingId, setEditingId] = React.useState(null)
+      // 预览与编辑互斥：同一时刻最多一个浮层。
+      const [previewId, setPreviewId] = React.useState(null)
       const [settingsOpen, setSettingsOpen] = React.useState(false)
       const [notice, setNotice] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
@@ -1378,9 +1642,52 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      // 便签被删除后不留下悬空的预览卡。
+      React.useEffect(() => {
+        if (previewId === null) return
+        if (!snapshot.tasks.some((task) => task.id === previewId)) setPreviewId(null)
+      }, [previewId, snapshot.tasks])
+
+      // 预览不是模态：Esc、点画布空白或顶栏都会关闭它；点另一张便签则保持，
+      // 等那张便签自己的单击判定完成后切换过去（不会先关再开、造成闪动）。
+      React.useEffect(() => {
+        if (previewId === null) return undefined
+        const onKey = (event) => {
+          if (event.key === 'Escape') setPreviewId(null)
+        }
+        const onPointerDown = (event) => {
+          const target = event.target
+          if (!target || typeof target.closest !== 'function') return
+          if (target.closest('.todo-preview') || target.closest('.todo-note')) return
+          setPreviewId(null)
+        }
+        window.addEventListener('keydown', onKey)
+        document.addEventListener('pointerdown', onPointerDown, true)
+        return () => {
+          window.removeEventListener('keydown', onKey)
+          document.removeEventListener('pointerdown', onPointerDown, true)
+        }
+      }, [previewId])
+
       const tasks = snapshot.tasks
+      const workspaceList = snapshot.workspaces || []
+      const knownWorkspaceIds = new Set(workspaceList.map((item) => item.id))
+      const workspaceById = new Map(workspaceList.map((item) => [item.id, item]))
+      // 便签引用了宿主里已经不存在的工作区：仍然给一个可筛选的占位选项，
+      // 否则这些便签只能在「全部工作区」下看到，没法单独筛出来。
+      const missingWorkspaceIds = tasks
+        .map((task) => task.workspaceId)
+        .filter((id) => Boolean(id) && !knownWorkspaceIds.has(id))
+        .filter((id, index, list) => list.indexOf(id) === index)
+      if (workspaceFilter !== 'all' && workspaceFilter !== 'none'
+        && !knownWorkspaceIds.has(workspaceFilter) && !missingWorkspaceIds.includes(workspaceFilter)) {
+        missingWorkspaceIds.push(workspaceFilter)
+      }
       const byFilter = tasks.filter((task) => {
         if (filter !== 'all' && task.status !== filter) return false
+        const workspaceMatch = workspaceFilter === 'all'
+          || (workspaceFilter === 'none' ? !task.workspaceId : task.workspaceId === workspaceFilter)
+        if (!workspaceMatch) return false
         if (!query.trim()) return true
         const needle = query.trim().toLowerCase()
         return task.title.toLowerCase().includes(needle)
@@ -1454,9 +1761,17 @@ window.__ModuleLoader__.load({
 
       async function createNote() {
         if (busy || editingId !== null) return
+        setPreviewId(null)
         setBusy(true)
         const spot = findSpot()
-        const result = await store.create({ title: t('titlePlaceholder'), x: spot.x, y: spot.y, color: 'cream' })
+        // 正在按某个工作区筛选时，新便签直接挂到该工作区，否则一创建就会从视图里消失。
+        const draft = { title: t('titlePlaceholder'), x: spot.x, y: spot.y, color: 'cream' }
+        if (workspaceFilter !== 'all'
+          && workspaceFilter !== 'none'
+          && workspaceList.some((item) => item.id === workspaceFilter)) {
+          draft.workspaceId = workspaceFilter
+        }
+        const result = await store.create(draft)
         setBusy(false)
         if (!result.ok) {
           setNotice({ kind: 'error', text: requestErrorText(t, result) })
@@ -1469,6 +1784,7 @@ window.__ModuleLoader__.load({
 
       async function arrange() {
         if (editingId !== null) return
+        setPreviewId(null)
         const width = canvasWidth - 48
         const columns = Math.max(1, Math.floor((width + GAP) / (NOTE_W + GAP)))
         const ordered = tasks.slice().sort(compareStatusThenRecent)
@@ -1481,6 +1797,25 @@ window.__ModuleLoader__.load({
         if (!result.ok) setNotice({ kind: 'error', text: requestErrorText(t, result) })
       }
 
+      // 单击预览 / 双击（或预览卡按钮）编辑：预览与编辑互斥，打开一个就关掉另一个。
+      function openPreview(id) {
+        if (editingId !== null) return
+        setPreviewId((current) => (current === id ? current : id))
+      }
+
+      function openEditor(id) {
+        setPreviewId(null)
+        setEditingId(id)
+      }
+
+      // 便签顶部的小标签只显示工作区名；工作区已被宿主移除时给一句提示文案。
+      function workspaceLabelOf(task) {
+        if (!task.workspaceId) return ''
+        const found = workspaceById.get(task.workspaceId)
+        return found ? (found.title || found.path || found.id) : t('removedWorkspace')
+      }
+
+      const preview = previewId ? tasks.find((task) => task.id === previewId) : null
       const editing = editingId ? tasks.find((task) => task.id === editingId) : null
 
       const chips = [
@@ -1500,6 +1835,24 @@ window.__ModuleLoader__.load({
               'aria-label': t('search'),
               onChange: (event) => setQuery(event.target.value),
             })),
+          h('div', { className: 'todo-workspace-filter' },
+            h('select', {
+              value: workspaceFilter,
+              'aria-label': t('workspaceFilter'),
+              title: t('workspaceFilter'),
+              onChange: (event) => setWorkspaceFilter(event.target.value),
+            },
+              h('option', { value: 'all' }, t('allWorkspaces')),
+              h('option', { value: 'none' }, t('unlinked')),
+              ...workspaceList.map((item) => h('option', {
+                key: item.id,
+                value: item.id,
+              }, item.title || item.path || item.id)),
+              ...missingWorkspaceIds.map((id) => h('option', {
+                key: `missing-${id}`,
+                value: id,
+              }, `${t('removedWorkspace')} · ${id}`))),
+            h(ChevronDownIcon)),
           h('div', { className: 'todo-chips', role: 'group', 'aria-label': t('statusField') },
             ...chips.map((chip) => h('button', {
               key: chip.status,
@@ -1531,12 +1884,24 @@ window.__ModuleLoader__.load({
             t,
             canvasWidth,
             draggingEnabled: editingId === null,
-            onOpen: () => setEditingId(task.id),
+            previewing: previewId === task.id,
+            workspaceLabel: workspaceLabelOf(task),
+            onPreview: () => openPreview(task.id),
+            onEdit: () => openEditor(task.id),
             onMove: moveNote,
             onDragY: (y) => { pointerY.current = y },
             onDragStart: beginDragScroll,
             onDragEnd: endDragScroll,
           })),
+          preview ? h(PreviewCard, {
+            key: `preview-${preview.id}`,
+            task: preview,
+            t,
+            canvasWidth,
+            workspaces: snapshot.workspaces || [],
+            onClose: () => setPreviewId(null),
+            onEdit: () => openEditor(preview.id),
+          }) : null,
           editing ? h(NoteEditor, {
             key: `editor-${editing.id}`,
             task: editing,

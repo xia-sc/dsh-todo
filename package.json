@@ -1,6 +1,6 @@
 {
   "name": "@xia-sc/dsh-todo",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "便签墙式 TODO 清单：自由摆放的暖色便签、原地展开编辑、可选的工作区与起止时间与文档附件，以及默认关闭、按需加载给 LLM 的工具。",
   "license": "MIT",
   "author": "xia-sc",

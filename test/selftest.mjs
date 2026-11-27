@@ -224,6 +224,14 @@ const children = afterSplit.body.data.tasks.filter((task) => task.parentId === p
 check('子便签带 parentId 且为规划中', children.length === 2 && children.every((task) => task.status === 'planned'),
   JSON.stringify(children.map((task) => [task.title, task.status])))
 
+// 归档：默认视图与 all 都不含，显式 status: archived 才返回。
+const archivedUpdate = (await updateTool.execute({ id: plainId, status: 'archived' }, {})).text
+check('todo_update 可以归档', /Updated/.test(archivedUpdate) && /archived/.test(archivedUpdate), archivedUpdate)
+const allText = (await listTool.execute({ status: 'all' }, {})).text
+check('todo_list 的 all 不含已归档', allText.includes('整理素材') === false, allText)
+const archivedText = (await listTool.execute({ status: 'archived' }, {})).text
+check('todo_list 显式列出已归档', archivedText.includes('整理素材'), archivedText)
+
 const disabled = await callRoute('/config', 'POST', { llmTools: false })
 check('关闭后入口与已加载工具都撤销',
   disabled.body?.data?.llmTools === false && registered.length === 0 && agentRegistered.length === 0,
@@ -274,15 +282,21 @@ writeFileSync(join(HOME, 'dsh-todo', 'tasks.json'), JSON.stringify({
   tasks: [
     { id: 'todo_legacy1', title: '旧便签一', status: 'planned', planStartAt: null, updatedAt: '2026-11-20T00:00:00.000Z', createdAt: '2026-11-20T00:00:00.000Z' },
     { id: 'todo_legacy2', title: '旧便签二', status: 'planned', planStartAt: null, updatedAt: '2026-11-21T00:00:00.000Z', createdAt: '2026-11-21T00:00:00.000Z' },
+    { id: 'todo_legacy3', title: '旧便签三', status: 'cancelled', planStartAt: null, updatedAt: '2026-11-22T00:00:00.000Z', createdAt: '2026-11-22T00:00:00.000Z' },
   ],
 }))
 apply(makeContext(), {})
-const migratedTasks = JSON.parse(readFileSync(join(HOME, 'dsh-todo', 'tasks.json'), 'utf8')).tasks
+const migratedFile = JSON.parse(readFileSync(join(HOME, 'dsh-todo', 'tasks.json'), 'utf8'))
+const migratedTasks = migratedFile.tasks
 check('旧数据自动补位置与纸色',
   migratedTasks.every((task) => typeof task.x === 'number' && typeof task.y === 'number')
   && migratedTasks.every((task) => task.color === 'cream')
   && migratedTasks[0].x === 24 && migratedTasks[1].x === 288,
   JSON.stringify(migratedTasks.map((task) => [task.title, task.x, task.y, task.color])))
+check('旧 cancelled 一次性迁移为 archived',
+  migratedTasks.find((task) => task.id === 'todo_legacy3')?.status === 'archived',
+  JSON.stringify(migratedTasks.map((task) => [task.id, task.status])))
+check('存储版本升到 2', migratedFile.version === 2, String(migratedFile.version))
 
 // ---------------------------------------------------------------- 删除与留档
 

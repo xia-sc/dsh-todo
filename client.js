@@ -18,7 +18,9 @@ window.__ModuleLoader__.load({
     const API = '/dsh-todo/api'
     const NS = 'xia-sc.dsh-todo'
     const PANEL_ID = 'todo-wall'
-    const STATUSES = ['planned', 'active', 'done', 'cancelled']
+    const STATUSES = ['planned', 'active', 'done', 'archived']
+    // 「全部」的状态筛选与墙面默认视图：已归档只在显式选中「已归档」时出现。
+    const WALL_STATUSES = ['planned', 'active', 'done']
     const PAPER = {
       cream: '#fdf6d9',
       lemon: '#fbf0b5',
@@ -59,7 +61,9 @@ window.__ModuleLoader__.load({
         statusPlanned: '规划中',
         statusActive: '进行中',
         statusDone: '已完成',
-        statusCancelled: '已撤销',
+        statusArchived: '已归档',
+        archiveHint: '已归档的便签默认不在墙上显示；改成其它状态即可取消归档。',
+        archivedSaved: '已归档，可在「已归档」里查看',
         titleField: '标题',
         titlePlaceholder: '标题',
         noteField: '正文',
@@ -122,7 +126,7 @@ window.__ModuleLoader__.load({
         retry: '重试',
         requestFailed: '请求失败，请稍后重试。',
         errNotFound: '这张便签已经被删除，刷新后再试。',
-        errStatus: '状态只能是规划中、进行中、已完成、已撤销。',
+        errStatus: '状态只能是规划中、进行中、已完成、已归档。',
         errTime: '时间格式不正确，请重新选择。',
         errAttachments: '每张便签最多 20 个附件。',
         errAttachmentInvalid: '附件路径或链接无效。',
@@ -160,7 +164,9 @@ window.__ModuleLoader__.load({
         statusPlanned: 'Planned',
         statusActive: 'In progress',
         statusDone: 'Done',
-        statusCancelled: 'Cancelled',
+        statusArchived: 'Archived',
+        archiveHint: 'Archived notes stay off the wall by default. Switch to another status to unarchive.',
+        archivedSaved: 'Archived — open the Archived filter to find it',
         titleField: 'Title',
         titlePlaceholder: 'Title',
         noteField: 'Body',
@@ -223,7 +229,7 @@ window.__ModuleLoader__.load({
         retry: 'Retry',
         requestFailed: 'The request failed. Try again.',
         errNotFound: 'That note was already deleted. Refresh and try again.',
-        errStatus: 'Status must be planned, in progress, done or cancelled.',
+        errStatus: 'Status must be planned, in progress, done or archived.',
         errTime: 'That date and time is not valid.',
         errAttachments: 'A note can keep at most 20 attachments.',
         errAttachmentInvalid: 'That attachment path or link is not valid.',
@@ -287,7 +293,7 @@ window.__ModuleLoader__.load({
       .todo-chip[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font-weight:600}
       .todo-chip .dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}      .todo-chip[data-status="active"] .dot{background:var(--dsw-alias-state-business-primary)}
       .todo-chip[data-status="done"] .dot{background:var(--dsw-alias-state-done-primary)}
-      .todo-chip[data-status="cancelled"] .dot{background:var(--dsw-alias-label-tertiary)}
+      .todo-chip[data-status="archived"] .dot{background:var(--dsw-alias-label-tertiary)}
       .todo-chip .n{color:var(--dsw-alias-label-tertiary);font-weight:400;font-variant-numeric:tabular-nums}
       .todo-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:4px;height:32px;padding:0 12px;border:1px solid transparent;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;cursor:pointer;transition:background-color .12s}
       .todo-btn:disabled{cursor:not-allowed;opacity:.4}
@@ -331,7 +337,7 @@ window.__ModuleLoader__.load({
       .todo-tag .dot{width:6px;height:6px;border-radius:50%;background:#8b8476}
       .todo-tag[data-status="active"] .dot{background:#3d7e9c}
       .todo-tag[data-status="done"] .dot{background:#578a5d}
-      .todo-tag[data-status="cancelled"] .dot{background:#a7a196}
+      .todo-tag[data-status="archived"] .dot{background:#a7a196}
       .todo-note-top .todo-tag{flex:none}
       /* 工作区小标签：虚线框比状态更轻，名字太长就省略，悬停看全名 */
       .todo-workspace-tag{display:inline-flex;align-items:center;gap:4px;flex:0 1 auto;min-width:0;max-width:100%;height:20px;padding:0 7px;border-radius:999px;border:1px dashed rgba(120,100,60,.3);background:transparent;color:var(--todo-ink-faint);font-size:11px;line-height:1;white-space:nowrap;overflow:hidden}
@@ -403,7 +409,7 @@ window.__ModuleLoader__.load({
       .todo-status-btn .dot{width:6px;height:6px;border-radius:50%;background:#8b8476}
       .todo-status-btn[data-status="active"] .dot{background:#3d7e9c}
       .todo-status-btn[data-status="done"] .dot{background:#578a5d}
-      .todo-status-btn[data-status="cancelled"] .dot{background:#a7a196}
+      .todo-status-btn[data-status="archived"] .dot{background:#a7a196}
       .todo-details{border-top:1px solid rgba(120,100,60,.16);padding-top:7px}
       .todo-details summary{cursor:pointer;font-size:11px;color:var(--todo-ink-faint);list-style:none}
       .todo-details summary::-webkit-details-marker{display:none}
@@ -1061,7 +1067,7 @@ window.__ModuleLoader__.load({
       }
 
       const when = timeText(task, t)
-      const quiet = task.status === 'done' || task.status === 'cancelled'
+      const quiet = task.status === 'done' || task.status === 'archived'
       const bodyRef = React.useRef(null)
 
       React.useEffect(() => {
@@ -1334,7 +1340,7 @@ window.__ModuleLoader__.load({
           setError(requestErrorText(t, result))
           return
         }
-        onChanged(t('saved'))
+        onChanged(status === 'archived' ? t('archivedSaved') : t('saved'))
         onClose()
       }
 
@@ -1474,6 +1480,9 @@ window.__ModuleLoader__.load({
             'aria-pressed': status === value ? 'true' : 'false',
             onClick: () => setStatus(value),
           }, h('i', { className: 'dot' }), t('status' + value.charAt(0).toUpperCase() + value.slice(1))))),
+        status === 'archived'
+          ? h('p', { className: 'todo-time-hint' }, t('archiveHint'))
+          : null,
         h('details', { className: 'todo-details' },
           h('summary', null, t('moreFields')),
           h('label', { className: 'todo-field', style: { marginBottom: '7px' } },
@@ -1684,7 +1693,12 @@ window.__ModuleLoader__.load({
         missingWorkspaceIds.push(workspaceFilter)
       }
       const byFilter = tasks.filter((task) => {
-        if (filter !== 'all' && task.status !== filter) return false
+        // 「全部」是墙面默认视图：已归档不出现；只有选中「已归档」时才显示。
+        if (filter === 'all') {
+          if (WALL_STATUSES.indexOf(task.status) < 0) return false
+        } else if (task.status !== filter) {
+          return false
+        }
         const workspaceMatch = workspaceFilter === 'all'
           || (workspaceFilter === 'none' ? !task.workspaceId : task.workspaceId === workspaceFilter)
         if (!workspaceMatch) return false
@@ -1696,9 +1710,12 @@ window.__ModuleLoader__.load({
       })
       const visibleIds = new Set(byFilter.map((task) => task.id))
 
-      const counts = { all: tasks.length }
+      const counts = { all: 0 }
       for (const status of STATUSES) counts[status] = 0
-      for (const task of tasks) counts[task.status] += 1
+      for (const task of tasks) {
+        if (Object.prototype.hasOwnProperty.call(counts, task.status)) counts[task.status] += 1
+        if (WALL_STATUSES.indexOf(task.status) >= 0) counts.all += 1
+      }
 
       const canvasRef = React.useRef(null)
       const [canvasWidth, setCanvasWidth] = React.useState(900)
@@ -1940,7 +1957,7 @@ window.__ModuleLoader__.load({
         h('span', null, t('wallHint')),
         h('span', { className: 'sep', 'aria-hidden': true }),
         h('span', { className: 'state' },
-          `${tasks.length} · ${t('statusPlanned')} ${counts.planned} · ${t('statusActive')} ${counts.active} · ${t('statusDone')} ${counts.done} · ${t('statusCancelled')} ${counts.cancelled}`),
+          `${counts.all} · ${t('statusPlanned')} ${counts.planned} · ${t('statusActive')} ${counts.active} · ${t('statusDone')} ${counts.done} · ${t('statusArchived')} ${counts.archived}`),
         h('span', { className: 'spacer' }),
         h('button', {
           type: 'button',

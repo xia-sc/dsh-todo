@@ -18,15 +18,17 @@ import { registerRoutes } from './routes.js'
 export const name = '@xia-sc/dsh-todo'
 export const inject = ['tools']
 
-const PLUGIN_VERSION = '0.1.3'
+const PLUGIN_VERSION = '0.1.5'
 const HOME = process.env.DSH_HOME || join(homedir(), '.dsh')
 const DATA_DIR = join(HOME, 'dsh-todo')
 const TASKS_FILE = join(DATA_DIR, 'tasks.json')
 const CONFIG_FILE = join(DATA_DIR, 'config.json')
-const STORE_VERSION = 1
+const STORE_VERSION = 2
 
 /** 状态只有这四种，不增不减。 */
-const STATUSES = ['planned', 'active', 'done', 'cancelled']
+const STATUSES = ['planned', 'active', 'done', 'archived']
+/** 默认视图（便签墙）可见的状态：已归档只在显式筛选时出现。 */
+const WALL_STATUSES = ['planned', 'active', 'done']
 /** “待完成” = 规划中 + 进行中。 */
 const PENDING = ['planned', 'active']
 
@@ -272,36 +274,42 @@ function createStore(ctx) {
         writeJsonAtomic(TASKS_FILE, { version: STORE_VERSION, tasks: [] })
         return
       }
+      let migrated = false
       store.items = raw
         .filter((task) => isPlainObject(task) && typeof task.id === 'string' && task.id !== '')
-        .map((task) => ({
-          id: String(task.id),
-          title: typeof task.title === 'string' ? task.title : '',
-          note: typeof task.note === 'string' ? task.note : '',
-          status: STATUSES.indexOf(task.status) >= 0 ? task.status : 'planned',
-          workspaceId: typeof task.workspaceId === 'string' ? task.workspaceId : null,
-          planStartAt: typeof task.planStartAt === 'string' ? task.planStartAt : null,
-          planEndAt: typeof task.planEndAt === 'string' ? task.planEndAt : null,
-          attachments: Array.isArray(task.attachments)
-            ? task.attachments.filter((entry) => isPlainObject(entry) && typeof entry.path === 'string')
-              .map((entry) => ({
-                id: String(entry.id ?? `att_${randomUUID().replace(/-/g, '').slice(0, 8)}`),
-                name: typeof entry.name === 'string' ? entry.name : lastSegment(entry.path),
-                path: String(entry.path),
-                kind: entry.kind === 'link' ? 'link' : 'file',
-                ...(typeof entry.size === 'number' ? { size: entry.size } : {}),
-                ...(entry.missing === true ? { missing: true } : {}),
-              }))
-            : [],
-          parentId: typeof task.parentId === 'string' ? task.parentId : null,
-          color: NOTE_COLORS.indexOf(task.color) >= 0 ? task.color : DEFAULT_NOTE_COLOR,
-          x: typeof task.x === 'number' && Number.isFinite(task.x) && task.x >= 0 ? Math.round(task.x) : null,
-          y: typeof task.y === 'number' && Number.isFinite(task.y) && task.y >= 0 ? Math.round(task.y) : null,
-          createdAt: typeof task.createdAt === 'string' ? task.createdAt : nowIso(),
-          updatedAt: typeof task.updatedAt === 'string' ? task.updatedAt : nowIso(),
-        }))
+        .map((task) => {
+          // 0.1.4 及更早版本的「已撤销」（cancelled）一次性并入「已归档」（archived）：
+          // 旧状态不再保留，迁移后立即回写，避免两套状态并存。
+          const nextStatus = task.status === 'cancelled' ? 'archived' : task.status
+          if (nextStatus !== task.status) migrated = true
+          return {
+            id: String(task.id),
+            title: typeof task.title === 'string' ? task.title : '',
+            note: typeof task.note === 'string' ? task.note : '',
+            status: STATUSES.indexOf(nextStatus) >= 0 ? nextStatus : 'planned',
+            workspaceId: typeof task.workspaceId === 'string' ? task.workspaceId : null,
+            planStartAt: typeof task.planStartAt === 'string' ? task.planStartAt : null,
+            planEndAt: typeof task.planEndAt === 'string' ? task.planEndAt : null,
+            attachments: Array.isArray(task.attachments)
+              ? task.attachments.filter((entry) => isPlainObject(entry) && typeof entry.path === 'string')
+                .map((entry) => ({
+                  id: String(entry.id ?? `att_${randomUUID().replace(/-/g, '').slice(0, 8)}`),
+                  name: typeof entry.name === 'string' ? entry.name : lastSegment(entry.path),
+                  path: String(entry.path),
+                  kind: entry.kind === 'link' ? 'link' : 'file',
+                  ...(typeof entry.size === 'number' ? { size: entry.size } : {}),
+                  ...(entry.missing === true ? { missing: true } : {}),
+                }))
+              : [],
+            parentId: typeof task.parentId === 'string' ? task.parentId : null,
+            color: NOTE_COLORS.indexOf(task.color) >= 0 ? task.color : DEFAULT_NOTE_COLOR,
+            x: typeof task.x === 'number' && Number.isFinite(task.x) && task.x >= 0 ? Math.round(task.x) : null,
+            y: typeof task.y === 'number' && Number.isFinite(task.y) && task.y >= 0 ? Math.round(task.y) : null,
+            createdAt: typeof task.createdAt === 'string' ? task.createdAt : nowIso(),
+            updatedAt: typeof task.updatedAt === 'string' ? task.updatedAt : nowIso(),
+          }
+        })
       // 旧数据没有摆放位置：按网格补齐并回写，保证每台客户端看到同一面墙。
-      let migrated = false
       let placed = 0
       for (const task of store.items) {
         if (task.x !== null && task.y !== null) continue
@@ -390,7 +398,8 @@ function createOperations(ctx, store, configRef, syncTools) {
     const wanted = status === 'pending'
       ? PENDING
       : status === 'all'
-        ? STATUSES
+        // all 与面板的「全部」一致：默认不含已归档，归档要显式问 archived。
+        ? WALL_STATUSES
         : [statusField(status)]
     const query = typeof options.query === 'string' ? options.query.trim().toLowerCase() : ''
     const workspace = typeof options.workspace === 'string' ? options.workspace.trim().toLowerCase() : ''
@@ -408,7 +417,7 @@ function createOperations(ctx, store, configRef, syncTools) {
       .filter(matchWorkspace)
       .filter((task) => !query || task.title.toLowerCase().includes(query) || task.note.toLowerCase().includes(query))
       .sort((left, right) => {
-        // 先按状态分组（规划中→进行中→已完成→已撤销），组内最近改过的在前。
+        // 先按状态分组（规划中→进行中→已完成→已归档），组内最近改过的在前。
         const leftRank = STATUSES.indexOf(left.status)
         const rightRank = STATUSES.indexOf(right.status)
         if (leftRank !== rightRank) return leftRank - rightRank
@@ -600,7 +609,7 @@ function createOperations(ctx, store, configRef, syncTools) {
       }
 
       let parentView = parent
-      if (body.markParentActive === true && parent.status !== 'done' && parent.status !== 'cancelled') {
+      if (body.markParentActive === true && parent.status !== 'done' && parent.status !== 'archived') {
         parent.status = 'active'
         parent.updatedAt = nowIso()
         parentView = parent
@@ -613,7 +622,7 @@ function createOperations(ctx, store, configRef, syncTools) {
   /** 工具结果文本：只读列表，方便模型直接引用 id。 */
   function renderList(result) {
     if (result.tasks.length === 0) {
-      return 'No tasks matched. The sticky wall has no pending notes for this filter.'
+      return 'No tasks matched. The sticky wall has no notes for this filter.'
     }
     return `${result.tasks.length} task(s) on the sticky wall:\n${result.tasks.map(describe).join('\n')}`
   }
@@ -642,15 +651,15 @@ function createTools(operations, renderList) {
     {
       name: 'todo_list',
       description: 'List notes on the user\'s sticky-note wall (todo list). Pending means planned or in progress; '
-        + 'completed and cancelled notes stay hidden unless status asks for them. Read-only. '
+        + 'completed and archived notes stay hidden unless status asks for them. Read-only. '
         + 'Call it before todo_update or todo_split to get the current task ids. '
         + 'A note may have no workspace, no start or end time and no attachment: those fields are optional, '
         + 'and such a note is a plain sticky note.',
       parameters: {
         status: {
           type: 'string',
-          enum: ['pending', 'planned', 'active', 'done', 'cancelled', 'all'],
-          description: 'Which notes to list. Defaults to pending (planned + in progress).',
+          enum: ['pending', 'planned', 'active', 'done', 'archived', 'all'],
+          description: 'Which notes to list. Defaults to pending (planned + in progress). all = every visible note; archived notes only with archived.',
         },
         workspace: {
           type: 'string',
@@ -681,7 +690,7 @@ function createTools(operations, renderList) {
       description: 'Change one note on the user\'s sticky-note wall: its title, body text, status, linked workspace, '
         + 'planned start or expected end time, and its document attachments. Every field is optional and an empty value '
         + 'is valid — passing clear removes a field and turns the note back into a plain sticky note. '
-        + 'Status is limited to planned, active, done and cancelled.',
+        + 'Status is limited to planned, active, done and archived.',
       parameters: {
         id: {
           type: 'string',
@@ -692,8 +701,8 @@ function createTools(operations, renderList) {
         note: { type: 'string', description: 'New body text. An empty string clears it.' },
         status: {
           type: 'string',
-          enum: ['planned', 'active', 'done', 'cancelled'],
-          description: 'New status. planned = 规划中, active = 进行中, done = 已完成, cancelled = 已撤销.',
+          enum: ['planned', 'active', 'done', 'archived'],
+          description: 'New status. planned = 规划中, active = 进行中, done = 已完成, archived = 已归档 (hidden from the wall until the archived filter is used).',
         },
         workspaceId: {
           type: 'string',

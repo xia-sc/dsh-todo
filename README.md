@@ -57,7 +57,7 @@ plugin_manager({ action: 'install_bundle', target: 'E:\\path\\to\\dsh-todo' })
 | --- | --- | --- |
 | 标题 `title` | **是** | 便签上的标题，最长 200 字。它是便签本身，不是业务前置校验 |
 | 正文 `note` | 否 | 便签正文，最长 4000 字；放不下时在便签内部滚动 |
-| 状态 `status` | 否 | `planned` 规划中、`active` 进行中、`done` 已完成、`cancelled` 已撤销；新建默认「规划中」 |
+| 状态 `status` | 否 | `planned` 规划中、`active` 进行中、`done` 已完成、`archived` 已归档；新建默认「规划中」 |
 | 纸色 `color` | 否 | 六种暖色纸：`cream` 米黄（默认）、`lemon` 柠檬、`mint` 薄荷、`sky` 天空、`rose` 樱花、`lilac` 丁香 |
 | 位置 `x` / `y` | 否 | 便签在墙上的像素坐标；旧数据没有时按网格自动补齐 |
 | 关联工作区 `workspaceId` | 否 | 取自 DSH 的工作区清单；不选即不关联（在编辑态「更多字段」里） |
@@ -68,7 +68,7 @@ plugin_manager({ action: 'install_bundle', target: 'E:\\path\\to\\dsh-todo' })
 
 标题必填（便签必须有字）；工作区、两个时间、附件全部留空时，便签就是一张普通便签：墙上只有标题、正文和状态小标签，没有多余元信息行。创建流程不会用这些可选字段做前置校验。
 
-状态只有上述四种，不增不减。
+状态只有上述四种，不增不减。`archived`（已归档）不是删除：数据保留，默认不占墙面，点顶部「已归档」筛选才显示；在编辑态把状态改回其它三种即取消归档。旧版本的 `cancelled`（已撤销）会在载入时一次性迁移为 `archived`。
 
 ## 便签墙怎么用
 
@@ -76,9 +76,10 @@ plugin_manager({ action: 'install_bundle', target: 'E:\\path\\to\\dsh-todo' })
 - **摆放**：按住便签拖到任意位置，松手就停在那里并立即保存；靠近窗口上下边缘时会自动滚动。重叠也没关系，最近动过的便签在上层。
 - **预览**：单击便签弹出只读预览卡，展示标题、正文、状态、时间、关联工作区与附件，不进入编辑态；点画布空白、Esc 或「关闭」收起。预览卡上有「编辑」按钮。
 - **编辑**：双击便签（或双击预览卡、点预览卡里的「编辑」）原地展开——标题、正文、纸色、状态、开始时间都在便签上改；结束时间默认收起，点「+ 添加结束时间」展开、点「清除」收起，只填开始也可以。点「更多字段」可以选工作区、加/删文档附件。Esc 取消（有改动会二次确认），Ctrl/⌘+Enter 保存，删除需要点两次确认。
-- **纸色与状态**：编辑态里选六种暖色纸；状态用右上角小圆点 + 文案表示；关联了工作区的便签会在状态标签右侧多一个小的工作区标签（虚线框，名字过长时省略）。已完成 / 已撤销的便签整张淡化，鼠标悬停或键盘聚焦时恢复清晰。
-- **浏览**：顶部搜索标题、正文和时间；状态筛选 chips 带数量；工作区下拉可按「全部工作区 / 不关联工作区 / 具体工作区」过滤，引用已移除工作区的便签也有单独选项；底部状态条显示各状态张数与待完成数。
-- **整理**：点「整理」按「状态（规划中 → 进行中 → 已完成 → 已撤销）→ 最近修改」把便签码成整齐的几列。
+- **纸色与状态**：编辑态里选六种暖色纸；状态用右上角小圆点 + 文案表示；关联了工作区的便签会在状态标签右侧多一个小的工作区标签（虚线框，名字过长时省略）。已完成 / 已归档的便签整张淡化，鼠标悬停或键盘聚焦时恢复清晰。
+- **归档**：编辑态状态行里选「已归档」并保存，便签从墙面默认视图消失（数据保留）；点顶部「已归档」chip 只查看归档便签，再点「全部」或其它状态即恢复默认隐藏。归档便签可在编辑态改成「规划中 / 进行中 / 已完成」取消归档。
+- **浏览**：顶部搜索标题、正文和时间；状态筛选 chips 带数量（「全部」不含归档）；工作区下拉可按「全部工作区 / 不关联工作区 / 具体工作区」过滤，引用已移除工作区的便签也有单独选项；底部状态条显示各状态张数与待完成数。
+- **整理**：点「整理」按「状态（规划中 → 进行中 → 已完成 → 已归档）→ 最近修改」把便签码成整齐的几列。
 - **正文滚动**：便签固定 240 × 200，正文超出时只在便签内部滚动，底部有淡出提示，不撑大、不截断。
 
 ## LLM 工具与开关
@@ -94,7 +95,7 @@ plugin_manager({ action: 'install_bundle', target: 'E:\\path\\to\\dsh-todo' })
 | 工具 | 作用 | 主要参数 |
 | --- | --- | --- |
 | `todo_load_tools` | 按需加载入口：把下面三个工具加载到当前 agent | 无 |
-| `todo_list` | 查看工具区（便签墙）内待完成的任务：默认只返回「规划中 + 进行中」，只读 | `status`（`pending`/`planned`/`active`/`done`/`cancelled`/`all`）、`workspace`（工作区 id 或标题片段）、`query`、`limit`（1–50，默认 20） |
+| `todo_list` | 查看工具区（便签墙）内待完成的任务：默认只返回「规划中 + 进行中」，只读；`all` 不含已归档，归档需显式查 `archived` | `status`（`pending`/`planned`/`active`/`done`/`archived`/`all`）、`workspace`（工作区 id 或标题片段）、`query`、`limit`（1–50，默认 20） |
 | `todo_update` | 修改一张便签：标题、正文、四状态、工作区、起止时间、附件增删；`clear` 可清空可选字段 | `id`（必填）、`title`、`note`、`status`、`workspaceId`、`planStartAt`、`planEndAt`、`clear`、`addAttachments`、`removeAttachments` |
 | `todo_split` | 拆解：把一张便签拆成多张子便签，保留父子关系，子便签默认「规划中」并继承父便签的工作区 | `id`（必填）、`subtasks`（1–12 个标题）、`note`、`status`（`planned`/`active`）、`markParentActive`、`inheritWorkspace` |
 
@@ -106,10 +107,10 @@ plugin_manager({ action: 'install_bundle', target: 'E:\\path\\to\\dsh-todo' })
 
 | 文件 | 内容 |
 | --- | --- |
-| `%DSH_HOME%\dsh-todo\tasks.json` | `{ "version": 1, "tasks": [...] }`，原子写入（临时文件 + 改名） |
+| `%DSH_HOME%\dsh-todo\tasks.json` | `{ "version": 2, "tasks": [...] }`，原子写入（临时文件 + 改名） |
 | `%DSH_HOME%\dsh-todo\config.json` | `{ "llmTools": false }` |
 
-`tasks.json` 手改坏时不会静默覆盖：原文件改名为 `tasks.json.corrupt-<时间戳>.json` 留档，再从空清单开始。旧数据缺少 `x`/`y`/`color` 时会在载入时补网格位置、默认米黄纸并回写。
+`tasks.json` 手改坏时不会静默覆盖：原文件改名为 `tasks.json.corrupt-<时间戳>.json` 留档，再从空清单开始。旧数据缺少 `x`/`y`/`color` 时会在载入时补网格位置、默认米黄纸并回写；旧版本 `cancelled` 状态同时迁移为 `archived`（存储版本升到 2）。
 
 ## 限制
 
@@ -124,7 +125,7 @@ plugin_manager({ action: 'install_bundle', target: 'E:\\path\\to\\dsh-todo' })
 | 需求 | 落地 |
 | --- | --- |
 | 1 任务可关联工作区 | `workspaceId`（可选）+ 编辑态「更多字段」里的工作区下拉 |
-| 2 四种状态 | `planned`/`active`/`done`/`cancelled`，便签上的状态小标签 + 编辑态状态分段按钮，校验拒绝其他值 |
+| 2 四种状态 | `planned`/`active`/`done`/`archived`，便签上的状态小标签 + 编辑态状态分段按钮，校验拒绝其他值；已归档默认隐藏、显式筛选可见 |
 | 3 计划开始与预计结束时间 | `planStartAt`/`planEndAt`（可选），便签底部一行时间；编辑态填开始，结束按需添加/清除 |
 | 4 文档附件 | `attachments`（可选），编辑态「更多字段」里增删、缺失标记 |
 | 7 LLM 工具 + 开关 | `todo_load_tools` 按需加载入口 + `todo_list`/`todo_update`/`todo_split`；`llmTools` 默认 `false`，设置 → 通用里开启，关闭时连入口一起撤销 |

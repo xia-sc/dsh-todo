@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Sticky wall TODO",
-    "description": "A sticky-note wall for TODO lists with a sidebar entry: pin a note fast, drag it between planned, in progress, done and cancelled, and edit it in place. Linked workspace, planned start, expected end and document attachments are optional, so a note with only a title stays a plain sticky note. The LLM tools todo_list, todo_update and todo_split are off by default and can be enabled in Settings > General; while off they are not registered and cannot be called."
+    "description": "A sticky-note wall for TODO lists with a sidebar entry: pin a note fast, drag it between planned, in progress, done and archived, and edit it in place. Archived notes stay off the wall until the archived filter is opened. Linked workspace, planned start, expected end and document attachments are optional, so a note with only a title stays a plain sticky note. The LLM tools todo_list, todo_update and todo_split are off by default and can be enabled in Settings > General; while off they are not registered and cannot be called."
   }
 }
